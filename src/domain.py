@@ -9,7 +9,10 @@ class DomainError(Exception):
 class ValidationError(DomainError): kind=ErrorKind.VALIDATION
 class NotFoundError(DomainError): kind=ErrorKind.NOT_FOUND
 class PermissionDenied(DomainError): kind=ErrorKind.FORBIDDEN
-class ConflictError(DomainError): kind=ErrorKind.CONFLICT
+class ConflictError(DomainError):
+    kind=ErrorKind.CONFLICT
+    def __init__(self,message,current_version=None):
+        super().__init__(message); self.current_version=current_version
 SEVERITIES=['minor', 'moderate', 'serious', 'fatal']; STATES=['reported', 'investigating', 'corrective_action', 'verification', 'closed']; ROLES=['reporter', 'investigator', 'safety_manager', 'viewer']
 @dataclass(frozen=True)
 class Item:
@@ -17,6 +20,12 @@ class Item:
 @dataclass(frozen=True)
 class Record:
     id:int; item_id:int; kind:str; detail:str; status:str; external_ref:Optional[str]; created_by:str; created_at:str
+@dataclass(frozen=True)
+class Measure:
+    id:int; measure_no:str; title:str; workstation:str; reason:str; acceptance:str; status:str; version:int; created_by:str; created_at:str; updated_at:str
+@dataclass(frozen=True)
+class ItemMeasure:
+    id:int; item_id:int; measure_id:int; version:int; linked_by:str; linked_at:str
 @dataclass(frozen=True)
 class AuditEntry:
     id:int; action:str; entity_type:str; entity_id:int; actor:str; detail:Dict[str,Any]; previous_hash:str; entry_hash:str; created_at:str

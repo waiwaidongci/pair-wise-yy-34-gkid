@@ -71,7 +71,11 @@ def make_handler(service: Service, static_dir: str):
                 status = 400
             else:
                 status = 500
-            self._json(status, {"error": exc.__class__.__name__, "message": str(exc)})
+            payload = {"error": exc.__class__.__name__, "message": str(exc)}
+            current_version = getattr(exc, "current_version", None)
+            if current_version is not None:
+                payload["current_version"] = current_version
+            self._json(status, payload)
 
         def do_GET(self) -> None:
             try:
@@ -84,6 +88,21 @@ def make_handler(service: Service, static_dir: str):
                     actor, role = self._identity()
                     del actor
                     self._json(200, {"items": service.list_items(role)})
+                elif path == "/api/measures":
+                    actor, role = self._identity()
+                    del actor
+                    status = parse_qs(urlparse(self.path).query).get("status", [None])[0]
+                    self._json(200, {"measures": service.list_measures(role, status)})
+                elif path.startswith("/api/measures/"):
+                    measure_id = int(path.split("/")[3])
+                    actor, role = self._identity()
+                    del actor
+                    self._json(200, service.get_measure(measure_id, role))
+                elif path.startswith("/api/items/") and path.endswith("/measures"):
+                    item_id = int(path.split("/")[3])
+                    actor, role = self._identity()
+                    del actor
+                    self._json(200, {"measures": service.list_item_measures(item_id, role)})
                 elif path.startswith("/api/items/") and path.endswith("/records"):
                     item_id = int(path.split("/")[3])
                     actor, role = self._identity()
@@ -97,7 +116,11 @@ def make_handler(service: Service, static_dir: str):
                 elif path == "/api/audit":
                     actor, role = self._identity()
                     del actor
-                    self._json(200, {"events": service.audit(role)})
+                    query = parse_qs(urlparse(self.path).query)
+                    item_id = query.get("item_id", [None])[0]
+                    entity_type = query.get("entity_type", [None])[0]
+                    item_id = int(item_id) if item_id else None
+                    self._json(200, {"events": service.audit(role, item_id, entity_type)})
                 else:
                     self._json(404, {"error": "not_found"})
             except Exception as exc:
@@ -110,6 +133,16 @@ def make_handler(service: Service, static_dir: str):
                 body = self._body()
                 if path == "/api/items":
                     self._json(201, service.create_item(body, actor, role))
+                elif path == "/api/measures":
+                    self._json(201, service.create_measure(body, actor, role))
+                elif path == "/api/admin/migrate-measures":
+                    self._json(200, service.migrate_measures(actor, role))
+                elif path.startswith("/api/measures/") and path.endswith("/link"):
+                    measure_id = int(path.split("/")[3])
+                    self._json(200, service.link_measure(measure_id, body, actor, role))
+                elif path.startswith("/api/measures/") and path.endswith("/acceptance"):
+                    measure_id = int(path.split("/")[3])
+                    self._json(200, service.accept_measure(measure_id, body, actor, role))
                 elif path.startswith("/api/items/") and path.endswith("/records"):
                     item_id = int(path.split("/")[3])
                     self._json(201, service.add_record(item_id, body, actor, role))
