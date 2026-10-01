@@ -71,7 +71,8 @@ def make_handler(service: Service, static_dir: str):
                 status = 400
             else:
                 status = 500
-            self._json(status, {"error": exc.__class__.__name__, "message": str(exc)})
+            self._json(status, {"error": exc.__class__.__name__, "message": str(exc),
+                                **getattr(exc, "payload", {})})
 
         def do_GET(self) -> None:
             try:
@@ -84,11 +85,26 @@ def make_handler(service: Service, static_dir: str):
                     actor, role = self._identity()
                     del actor
                     self._json(200, {"items": service.list_items(role)})
-                elif path.startswith("/api/items/") and path.endswith("/records"):
+                elif path == "/api/measures":
+                    actor, role = self._identity()
+                    del actor
+                    query = parse_qs(urlparse(self.path).query)
+                    conclusion = query.get("conclusion", [None])[0]
+                    self._json(200, {"measures": service.list_measures(role, conclusion)})
+                elif path.startswith("/api/measures/"):
+                    code = path.rsplit("/", 1)[-1]
+                    actor, role = self._identity()
+                    del actor
+                    self._json(200, service.get_measure(code, role))
+                elif path.startswith("/api/items/") and (
+                        path.endswith("/records") or path.endswith("/measures")):
                     item_id = int(path.split("/")[3])
                     actor, role = self._identity()
                     del actor
-                    self._json(200, {"records": service.list_records(item_id, role)})
+                    if path.endswith("/records"):
+                        self._json(200, {"records": service.list_records(item_id, role)})
+                    else:
+                        self._json(200, {"measures": service.list_item_measures(item_id, role)})
                 elif path.startswith("/api/items/"):
                     item_id = int(path.rsplit("/", 1)[-1])
                     actor, role = self._identity()
@@ -110,9 +126,23 @@ def make_handler(service: Service, static_dir: str):
                 body = self._body()
                 if path == "/api/items":
                     self._json(201, service.create_item(body, actor, role))
-                elif path.startswith("/api/items/") and path.endswith("/records"):
+                elif path == "/api/measures":
+                    self._json(201, service.create_measure(body, actor, role))
+                elif path.startswith("/api/measures/") and path.endswith("/accept"):
+                    code = path.split("/")[3]
+                    self._json(200, service.accept_measure(code, body, actor, role))
+                elif path.startswith("/api/measure-links/") and path.endswith("/verify"):
+                    link_id = int(path.rsplit("/", 2)[-2])
+                    self._json(200, service.verify_link(link_id, body, actor, role))
+                elif path.startswith("/api/items/") and (
+                        path.endswith("/records") or path.endswith("/measures")):
                     item_id = int(path.split("/")[3])
-                    self._json(201, service.add_record(item_id, body, actor, role))
+                    if path.endswith("/records"):
+                        self._json(201, service.add_record(item_id, body, actor, role))
+                    else:
+                        code = body.get("code")
+                        self._json(201, service.attach_measure(
+                            code, item_id, body, actor, role))
                 elif path.startswith("/api/items/") and path.endswith("/transition"):
                     item_id = int(path.split("/")[3])
                     target = body.get("target")

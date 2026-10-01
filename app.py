@@ -13,6 +13,10 @@ def parse_args():
     return parser.parse_args()
 def main():
     args=parse_args(); repository=Repository(args.db); service=Service(repository)
+    summary=service.upgrade_legacy_measures()
+    if summary["measures_created"]:
+        print(f"legacy measures merged: {summary['measures_created']} measures, "
+              f"{summary['records_merged']} records")
     server=ThreadingHTTPServer((args.host,args.port),make_handler(service,str(Path(__file__).resolve().parent/"static")))
     print(f"listening on http://{args.host}:{args.port}")
     try: server.serve_forever()

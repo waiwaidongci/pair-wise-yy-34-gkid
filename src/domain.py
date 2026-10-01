@@ -9,7 +9,11 @@ class DomainError(Exception):
 class ValidationError(DomainError): kind=ErrorKind.VALIDATION
 class NotFoundError(DomainError): kind=ErrorKind.NOT_FOUND
 class PermissionDenied(DomainError): kind=ErrorKind.FORBIDDEN
-class ConflictError(DomainError): kind=ErrorKind.CONFLICT
+class ConflictError(DomainError):
+    kind=ErrorKind.CONFLICT
+    def __init__(self,message,payload=None):
+        super().__init__(message); self.message=message; self.payload=payload or {}
+MEASURE_CONCLUSIONS=['pending','passed','failed']; LINK_STATES=['unverified','verified','recheck']
 SEVERITIES=['minor', 'moderate', 'serious', 'fatal']; STATES=['reported', 'investigating', 'corrective_action', 'verification', 'closed']; ROLES=['reporter', 'investigator', 'safety_manager', 'viewer']
 @dataclass(frozen=True)
 class Item:
@@ -20,6 +24,12 @@ class Record:
 @dataclass(frozen=True)
 class AuditEntry:
     id:int; action:str; entity_type:str; entity_id:int; actor:str; detail:Dict[str,Any]; previous_hash:str; entry_hash:str; created_at:str
+@dataclass(frozen=True)
+class Measure:
+    id:int; code:str; title:str; workstation:str; reason:str; conclusion:str; version:int; created_by:str; created_at:str; updated_at:str
+@dataclass(frozen=True)
+class MeasureLink:
+    id:int; measure_id:int; item_id:int; link_state:str; basis_version:int; recheck_reason:Optional[str]; created_by:str; created_at:str; updated_at:str
 def require_text(value,field,max_length=2000):
     if not isinstance(value,str) or not value.strip(): raise ValidationError(f"{field}不能为空")
     value=value.strip()
@@ -34,5 +44,13 @@ def require_number(value,field,minimum=0.0):
     except (TypeError,ValueError): raise ValidationError(f"{field}必须是数字")
     if number<minimum: raise ValidationError(f"{field}不能小于{minimum}")
     return number
+def require_code(value,field="code"):
+    value=require_text(value,field,40)
+    import re
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}",value): raise ValidationError(f"{field}只能包含字母、数字、下划线和短横线")
+    return value
+def require_conclusion(value):
+    if value not in MEASURE_CONCLUSIONS: raise ValidationError("conclusion必须是pending、passed或failed")
+    return value
 def ensure_role(role,allowed):
     if role not in allowed: raise PermissionDenied("当前角色无权执行该操作")
